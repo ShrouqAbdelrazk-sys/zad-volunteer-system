@@ -7,17 +7,16 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const path = require('path');
 
-// --- التعديل الأول: استيراد قاعدة البيانات من الملف اللي بره ---
+// استيراد قاعدة البيانات من الملف اللي بره
 const db = require('./db'); 
 
 const app = express();
 
+// إعدادات الأمان والـ CORS
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  origin: '*',
+  credentials: true
 }));
 
 app.use(compression());
@@ -25,6 +24,7 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// تحديد عدد الطلبات
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -32,17 +32,16 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// --- التعديل الثاني: الملفات ثابتة في الصفحة الرئيسية برضه ---
+// خدمة الملفات الثابتة من المجلد الرئيسي
 app.use(express.static(path.join(__dirname)));
 
-// --- التعديل الثالث: استيراد المسارات (Routes) من الملفات اللي بره مباشرة ---
+// استيراد المسارات (Routes) مباشرة من الملفات الخارجية
+// ملحوظة: لو ملف من دول مش موجود عندك ارفع علامة // قبله
 app.use('/api/auth', require('./auth'));
 app.use('/api/volunteers', require('./volunteers'));
-app.use('/api/evaluations', require('./evaluations'));
 app.use('/api/reports', require('./reports'));
-app.use('/api/alerts', require('./alerts'));
-app.use('/api/criteria', require('./criteria'));
 
+// اختبار حالة السيرفر والقاعدة
 app.get('/health', async (req, res) => {
   try {
     const result = await db.query('SELECT NOW() as current_time');
@@ -56,7 +55,7 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// توجيه الصفحات لملف index.html اللي بره
+// توجيه أي رابط لصفحة index.html
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
@@ -64,7 +63,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// معالج الأخطاء
+// معالج الأخطاء العام
 app.use((error, req, res, next) => {
   console.error('Server Error:', error);
   res.status(error.status || 500).json({
@@ -75,7 +74,7 @@ app.use((error, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(🚀 Server running on port ${PORT});
   try {
     await db.query('SELECT NOW()');
     console.log('✅ Database connected successfully');
