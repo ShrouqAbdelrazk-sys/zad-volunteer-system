@@ -81,6 +81,12 @@ app.listen(PORT, '0.0.0.0', async () => {
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
   }
+  const cors = require('cors');
+app.use(cors({
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 });
 
 module.exports = app;
