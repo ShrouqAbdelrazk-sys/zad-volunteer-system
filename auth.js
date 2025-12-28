@@ -1,92 +1,87 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const db = require('./db'); 
-
+const db = require('./db'); // التأكد من وجود ملف db.js بجانبه
 const router = express.Router();
 
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET || 'default-secret', {
-    expiresIn: process.env.JWT_EXPIRE_IN || '7d'
-  });
-};
+const JWT_SECRET = process.env.JWT_SECRET || 'zad-secret-key-2025';
 
-// تسجيل الدخول - النسخة الكاملة والمعدلة في "الصميم"
+// مسار تسجيل الدخول الكامل بكل المميزات
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 6 })
+    body('email').isEmail().withMessage('يرجى إدخال بريد إلكتروني صحيح').normalizeEmail(),
+    body('password').notEmpty().withMessage('كلمة المرور مطلوبة')
 ], async (req, res) => {
-  try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ message: 'بيانات غير صالحة', errors: errors.array() });
+        return res.status(400).json({ errors: errors.array() });
     }
 
     const { email, password } = req.body;
 
-    const result = await db.query(
-      'SELECT * FROM users WHERE email = $1 AND is_active = true',
-      [email]
-    );
+    try {
+        // الاستعلام بكل البيانات الأصلية
+        const result = await db.query(
+            'SELECT id, email, password, full_name, username, role FROM users WHERE email = $1',
+            [email]
+        );
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({ message: 'البريد أو الباسورد خطأ' });
+        if (result.rows.length === 0) {
+            return res.status(401).json({ message: 'بيانات الاعتماد غير صحيحة' });
+        }
+
+        const user = result.rows[0];
+
+        // التحقق من الباسورد (نص عادي)
+        if (password !== user.password) {
+            return res.status(401).json({ message: 'بيانات الاعتماد غير صحيحة' });
+        }
+
+        // تحديث آخر ظهور (لو العمود موجود في الداتابيز)
+        try {
+            await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+        } catch (e) { console.log('Update last_login skipped'); }
+
+        const token = jwt.sign(
+            { userId: user.id, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            message: 'تم تسجيل الدخول بنجاح',
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                full_name: user.full_name,
+                username: user.username,
+                role: user.role
+            }
+        });
+
+    } catch (error) {
+        console.error('Detailed Login Error:', error);
+        res.status(500).json({ 
+            message: 'خطأ داخلي في الخادم - تأكدي من اتصال الداتابيز', 
+            detail: error.message 
+        });
     }
-
-    const userData = result.rows[0];
-
-    // التعديل الذي ينهي كل شيء: يقبل النص العادي admin123 أو التشفير القديم
-    let isMatch = false;
-    if (password === userData.password) {
-      isMatch = true;
-    } else {
-      try {
-        isMatch = await bcrypt.compare(password, userData.password);
-      } catch (e) {
-        isMatch = false;
-      }
-    }
-
-    if (!isMatch) {
-      return res.status(401).json({ message: 'البريد أو الباسورد خطأ' });
-    }
-
-    await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [userData.id]);
-
-    const token = generateToken(userData.id);
-    const { password: _, ...userWithoutPassword } = userData;
-
-    // بنرجع الـ Object كامل زي ما الفرونت إيند عايزه بالظبط
-    res.json({
-      message: 'تم تسجيل الدخول بنجاح',
-      token,
-      user: userWithoutPassword
-    });
-
-  } catch (error) {
-    console.error('SERVER ERROR:', error);
-    res.status(500).json({ message: 'خطأ داخلي في الخادم', error: error.message });
-  }
 });
 
-// مسار Me (كامل بدون اختصار)
+// مسار التحقق من المستخدم الحالي (Me)
 router.get('/me', async (req, res) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return res.status(401).json({ message: 'غير مصرح' });
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-    const user = await db.query(
-      'SELECT id, email, full_name, username, role, is_active, created_at, last_login FROM users WHERE id = $1 AND is_active = true',
-      [decoded.userId]
-    );
-
-    if (user.rows.length === 0) return res.status(401).json({ message: 'يوزر غير موجود' });
-    res.json({ user: user.rows[0] });
-  } catch (error) {
-    res.status(401).json({ message: 'توكن غير صالح' });
-  }
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ message: 'غير مصرح' });
+        
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const result = await db.query('SELECT id, email, full_name, role FROM users WHERE id = $1', [decoded.userId]);
+        
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        res.status(401).json({ message: 'انتهت الجلسة' });
+    }
 });
 
 module.exports = router;
