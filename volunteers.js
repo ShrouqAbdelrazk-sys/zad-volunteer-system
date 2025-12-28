@@ -67,53 +67,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/volunteers/:id - جلب بيانات متطوع محدد
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const volunteer = await db.query(`
-      SELECT 
-        v.*,
-        (SELECT COUNT(*) FROM evaluations e WHERE e.volunteer_id = v.id) as total_evaluations,
-        (SELECT AVG(e.percentage) FROM evaluations e WHERE e.volunteer_id = v.id AND e.status = 'approved') as avg_performance,
-        (SELECT COUNT(*) FROM freeze_records fr WHERE fr.volunteer_id = v.id AND fr.is_active = true) as active_freezes
-      FROM volunteers v
-      WHERE v.id = $1
-    `, [id]);
-
-    if (volunteer.rows.length === 0) {
-      return res.status(404).json({
-        message: 'المتطوع غير موجود'
-      });
-    }
-
-    // جلب آخر 5 تقييمات
-    const recentEvaluations = await db.query(`
-      SELECT 
-        e.*,
-        u.full_name as evaluator_name
-      FROM evaluations e
-      LEFT JOIN users u ON e.evaluator_id = u.id
-      WHERE e.volunteer_id = $1
-      ORDER BY e.evaluation_month DESC, e.evaluation_year DESC
-      LIMIT 5
-    `, [id]);
-
-    res.json({
-      volunteer: volunteer.rows[0],
-      recent_evaluations: recentEvaluations.rows
-    });
-
-  } catch (error) {
-    console.error('Get volunteer error:', error);
-    res.status(500).json({
-      message: 'خطأ في جلب بيانات المتطوع',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
 // GET /api/volunteers/statistics/overview - إحصائيات المتطوعين
 router.get('/statistics/overview', async (req, res) => {
   try {
@@ -164,6 +117,53 @@ router.get('/statistics/overview', async (req, res) => {
     console.error('Get statistics error:', error);
     res.status(500).json({
       message: 'خطأ في جلب الإحصائيات',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/volunteers/:id - جلب بيانات متطوع محدد
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const volunteer = await db.query(`
+      SELECT 
+        v.*,
+        (SELECT COUNT(*) FROM evaluations e WHERE e.volunteer_id = v.id) as total_evaluations,
+        (SELECT AVG(e.percentage) FROM evaluations e WHERE e.volunteer_id = v.id AND e.status = 'approved') as avg_performance,
+        (SELECT COUNT(*) FROM freeze_records fr WHERE fr.volunteer_id = v.id AND fr.is_active = true) as active_freezes
+      FROM volunteers v
+      WHERE v.id = $1
+    `, [id]);
+
+    if (volunteer.rows.length === 0) {
+      return res.status(404).json({
+        message: 'المتطوع غير موجود'
+      });
+    }
+
+    // جلب آخر 5 تقييمات
+    const recentEvaluations = await db.query(`
+      SELECT 
+        e.*,
+        u.full_name as evaluator_name
+      FROM evaluations e
+      LEFT JOIN users u ON e.evaluator_id = u.id
+      WHERE e.volunteer_id = $1
+      ORDER BY e.evaluation_month DESC, e.evaluation_year DESC
+      LIMIT 5
+    `, [id]);
+
+    res.json({
+      volunteer: volunteer.rows[0],
+      recent_evaluations: recentEvaluations.rows
+    });
+
+  } catch (error) {
+    console.error('Get volunteer error:', error);
+    res.status(500).json({
+      message: 'خطأ في جلب بيانات المتطوع',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

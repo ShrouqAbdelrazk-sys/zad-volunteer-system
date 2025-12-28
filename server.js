@@ -25,6 +25,9 @@ app.use('/api/auth', require('./auth'));
 // المسارات دي لو مش موجودة حالياً السيرفر مش هيشتغل، لو ممسوحين حطي قبلهم //
 app.use('/api/volunteers', require('./volunteers'));
 app.use('/api/reports', require('./reports'));
+app.use('/api/evaluations', require('./evaluations'));
+app.use('/api/alerts', require('./alerts'));
+app.use('/api/criteria', require('./criteria'));
 
 // 4. اختبار حالة السيرفر والقاعدة (Health Check)
 app.get('/health', async (req, res) => {
